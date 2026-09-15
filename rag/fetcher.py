@@ -399,16 +399,23 @@ def fetch_rbi_circulars(days: int = 180, sources_limit: int = 3) -> List[Dict[st
 
 def fetch_all_filings(ticker: str) -> List[Dict[str, Any]]:
     """
-    Fetch all available filings for *ticker* from BSE and RBI.
+    Fetch all available filings for *ticker* from BSE and all three RBI sources.
 
-    NSE is skipped (API frequently returns 0 results and adds ~15s latency).
-    RBI press releases only — the fastest and most informative source.
+    Sources included:
+      - BSE: last 30 days of corporate announcements for *ticker*
+      - RBI Press Releases: last 90 days (macroeconomic context)
+      - RBI Circulars: last 90 days (regulatory guidance)
+      - RBI Notifications: last 90 days (banking/policy notices)
+
+    NSE is intentionally skipped — its API requires an active browser session
+    cookie and frequently returns 0 results, adding ~15 s latency with no gain.
+    fetch_nse_announcements() is implemented but not wired in here.
 
     Args:
         ticker: Stock ticker string (e.g. "RELIANCE.NS")
 
     Returns:
-        Combined list of document dicts from BSE + RBI.
+        Combined list of document dicts from BSE + RBI (all 3 endpoints).
     """
     print(f"[fetcher] --- Starting fetch for {ticker} ---")
 

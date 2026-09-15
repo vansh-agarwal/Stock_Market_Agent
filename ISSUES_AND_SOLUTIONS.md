@@ -1,5 +1,15 @@
 # Finance Agent Project: Issues and Solutions Report
 
+> **HISTORICAL DOCUMENT — NOT CURRENT STATE**
+> This document was written during an early prototype phase of the project.
+> It describes a Gemini-based version that used `start_server.py`, port 8080,
+> and a stubbed RAG pipeline. None of that reflects the current codebase.
+>
+> Current state: Groq LLM, Flask on port 5000 (env var `PORT`), fully
+> implemented RAG pipeline (ChromaDB + sentence-transformers), BSE + RBI
+> filings. See `README.md` and `API_SETUP_INSTRUCTIONS.md` for up-to-date
+> setup instructions.
+
 ## Overview
 This document outlines all issues identified during the development and testing of the Finance Agent project, along with their solutions and current status.
 

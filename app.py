@@ -60,8 +60,11 @@ def analyze():
         if not query:
             return jsonify({"error": "Field 'query' is required and cannot be empty"}), 400
 
+        # Extract optional ticker and pass it through to the agent
+        ticker = data.get("ticker", "").strip()
+
         # Run the agent
-        answer = run_agent_loop(query)
+        answer = run_agent_loop(query, ticker=ticker)
 
         return jsonify({"answer": answer, "query": query})
 
@@ -181,10 +184,10 @@ def filings_status():
 @app.route("/api/health", methods=["GET"])
 def health():
     """Health check endpoint."""
-    api_key_set = bool(os.getenv("GEMINI_API_KEY"))
+    api_key_set = bool(os.getenv("GROQ_API_KEY"))
     return jsonify({
         "status": "ok",
-        "gemini_api_key_configured": api_key_set
+        "groq_api_key_configured": api_key_set
     })
 
 

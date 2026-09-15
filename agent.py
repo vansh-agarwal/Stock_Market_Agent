@@ -253,13 +253,17 @@ def _call_groq_with_retry(
                 raise
 
 
-def run_agent_loop(user_query: str, max_iterations: int = 10) -> str:
+def run_agent_loop(user_query: str, max_iterations: int = 10, ticker: str = "") -> str:
     """
     Run the ReAct agent loop using Groq with tool calling.
 
     Args:
         user_query (str): The user's question or request
         max_iterations (int): Maximum number of tool call iterations
+        ticker (str): Optional stock ticker pre-extracted from the UI (e.g. "RELIANCE.NS").
+                      When provided it is injected into the user message so the LLM and all
+                      tool calls reliably target the right stock without relying on free-text
+                      extraction.  Falls back to LLM-inference when empty.
 
     Returns:
         str: Final response from the agent
@@ -296,10 +300,19 @@ def run_agent_loop(user_query: str, max_iterations: int = 10) -> str:
             "Please wait a moment and try again."
         )
 
+    # Build the user message, prepending ticker context when available
+    if ticker:
+        user_message = (
+            f"[Context: the user is asking about ticker symbol {ticker}]\n\n"
+            f"{user_query}"
+        )
+    else:
+        user_message = user_query
+
     # Build conversation messages
     messages: List[Dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_query},
+        {"role": "user", "content": user_message},
     ]
 
     for iteration in range(max_iterations):
@@ -346,6 +359,13 @@ def run_agent_loop(user_query: str, max_iterations: int = 10) -> str:
                     tool_input = json.loads(tool_call.function.arguments)
                 except json.JSONDecodeError:
                     tool_input = {}
+
+                # If a ticker was provided by the frontend and this tool accepts one,
+                # inject it as a default when the LLM omitted it.
+                if ticker:
+                    tools_with_ticker = {"get_stock_overview", "get_news", "query_filings_rag"}
+                    if tool_name in tools_with_ticker and "ticker" not in tool_input:
+                        tool_input["ticker"] = ticker
 
                 print(f"[agent] Calling tool: {tool_name} with input: {tool_input}")
                 result = execute_tool(tool_name, tool_input)

@@ -146,3 +146,7 @@ Thumbs.db
 *.tmp
 *.temp
 .cache
+
+# Project-specific
+# ChromaDB vector store — generated at runtime, must not be committed
+data/chroma_db/

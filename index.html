@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -1267,8 +1268,11 @@
                 };
 
                 const renderedHtml = marked.parse(answer, { renderer });
-                // Extra safety: strip any remaining <del> tags
-                const cleanHtml = renderedHtml.replace(/<del>([\s\S]*?)<\/del>/gi, '$1');
+                // Strip remaining <del> tags then sanitize to prevent XSS from
+                // external filing content that flows through the RAG pipeline.
+                const sanitizedHtml = DOMPurify.sanitize(
+                    renderedHtml.replace(/<del>([\s\S]*?)<\/del>/gi, '$1')
+                );
                 const timestamp = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
                 const html = `
@@ -1278,7 +1282,7 @@
                             <button class="copy-btn" id="copy-btn">&#128203; Copy</button>
                         </div>
                         <div class="agent-answer-body" id="answer-body">
-                            ${cleanHtml}
+                            ${sanitizedHtml}
                         </div>
                     </div>
                     <div class="sources">

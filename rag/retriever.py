@@ -1,13 +1,16 @@
 """
-Retriever module: orchestrates freshness checks, auto-fetch and semantic search.
+Retriever module: freshness checks and semantic search.
 
 Flow
 ----
-1. query_filings_rag(query, ticker) in tools.py calls ensure_data(ticker).
-2. ensure_data() checks ChromaDB: is there data for this ticker ingested
-   within the last CACHE_TTL_HOURS?  If not -> fetch + ingest.
-3. search(query, ticker) embeds the query and returns the top-k most
+1. tools.py calls is_data_fresh(ticker).  If stale, it fetches + ingests
+   synchronously via fetch_all_filings() + ingest_documents().
+2. search(query, ticker) embeds the query and returns the top-k most
    semantically similar chunks, always mixing in RBI macro documents.
+
+Background-thread machinery (ensure_data / _fetch_and_ingest) was
+removed — tools.py owns the fetch lifecycle synchronously to avoid race
+conditions between fetch and search.
 """
 
 from __future__ import annotations
@@ -66,54 +69,6 @@ def is_data_fresh(ticker: str, ttl_hours: int = CACHE_TTL_HOURS) -> bool:
     except Exception as e:
         print(f"[retriever] freshness check failed: {e}")
         return False
-
-
-# ---------------------------------------------------------------------------
-# Auto-fetch + ingest
-# ---------------------------------------------------------------------------
-
-import threading
-
-_fetch_lock = threading.Lock()
-_fetching: set = set()   # tickers currently being fetched in background
-
-
-def _fetch_and_ingest(ticker: str) -> None:
-    """Background worker: fetch + ingest for *ticker*, then clear the in-progress flag."""
-    try:
-        docs = fetch_all_filings(ticker)
-        if docs:
-            ingest_documents(docs)
-    except Exception as e:
-        print(f"[retriever] Background fetch failed for {ticker}: {e}")
-    finally:
-        with _fetch_lock:
-            _fetching.discard(ticker)
-
-
-def ensure_data(ticker: str) -> None:
-    """
-    Guarantee fresh data for *ticker* exists in ChromaDB.
-
-    * Cache hit  → returns immediately (< 1 ms).
-    * Cache miss → starts a background fetch thread and returns immediately.
-                   The next call (after ~5-10 s) will find the data ready.
-    """
-    if is_data_fresh(ticker):
-        clean = _normalize(ticker)
-        print(f"[retriever] Cache hit for {clean}")
-        return
-
-    clean = _normalize(ticker)
-    with _fetch_lock:
-        if clean in _fetching:
-            print(f"[retriever] Fetch already in progress for {clean}")
-            return
-        _fetching.add(clean)
-
-    print(f"[retriever] Cache miss — fetching {ticker} in background...")
-    t = threading.Thread(target=_fetch_and_ingest, args=(ticker,), daemon=True)
-    t.start()
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +157,6 @@ if __name__ == "__main__":
     import json
 
     ticker = "RELIANCE.NS"
-    ensure_data(ticker)
     results = search("quarterly revenue profits", ticker=ticker, top_k=3)
     print(json.dumps(results, indent=2, default=str))
+
