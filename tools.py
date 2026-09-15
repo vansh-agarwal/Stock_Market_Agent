@@ -5,6 +5,7 @@ Each tool follows a clean interface with docstrings and schemas for LLM function
 
 import yfinance as yf
 import json
+import math
 import requests
 import os
 from typing import Dict, Any, Optional, List
@@ -12,6 +13,15 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 
+def _clean_float(val, decimals: int = 2):
+    """Return a rounded float, or None if val is None, NaN, or Inf."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return None if (math.isnan(f) or math.isinf(f)) else round(f, decimals)
+    except (TypeError, ValueError):
+        return None
 
 
 def _format_dividend_yield(raw_yield) -> str:
@@ -106,22 +116,38 @@ def get_stock_overview(ticker: str) -> Dict[str, Any]:
                 continue
 
             latest_data = hist.iloc[-1]
+
+            # --- Current price ---
+            # hist.iloc[-1]["Close"] can be NaN when data hasn't settled
+            # (common outside trading hours for Indian exchanges on yfinance v1.7+).
+            # Prefer info["currentPrice"] / "regularMarketPrice" which are always present
+            # for a valid ticker, then fall back to the last non-NaN hist close.
+            price = (
+                _clean_float(info.get("currentPrice"))
+                or _clean_float(info.get("regularMarketPrice"))
+            )
+            if price is None:
+                # Last-resort: scan hist backward for a non-NaN close
+                closes = hist["Close"].dropna()
+                price = round(float(closes.iloc[-1]), 2) if not closes.empty else None
+
             overview = {
-                "symbol":        attempt_ticker.upper(),
-                "short_name":    info.get("shortName", "N/A"),
-                "current_price": round(float(latest_data["Close"]), 2),
-                "market_cap":    info.get("marketCap", 0),
-                "pe_ratio":      info.get("trailingPE", None),
+                "symbol":         attempt_ticker.upper(),
+                "short_name":     info.get("shortName", "N/A"),
+                "current_price":  price,
+                "market_cap":     info.get("marketCap", 0),
+                "pe_ratio":       _clean_float(info.get("trailingPE")),
                 "dividend_yield": _format_dividend_yield(info.get("dividendYield")),
-                "52_week_high":  info.get("fiftyTwoWeekHigh", None),
-                "52_week_low":   info.get("fiftyTwoWeekLow", None),
-                "volume":        int(latest_data["Volume"]),
-                "avg_volume":    info.get("averageVolume", 0),
-                "currency":      currency,
-                "exchange":      info.get("exchange", "N/A"),
-                "last_updated":  datetime.now().isoformat()
+                "52_week_high":   _clean_float(info.get("fiftyTwoWeekHigh")),
+                "52_week_low":    _clean_float(info.get("fiftyTwoWeekLow")),
+                "volume":         int(latest_data["Volume"]) if not math.isnan(float(latest_data.get("Volume", float("nan")))) else 0,
+                "avg_volume":     info.get("averageVolume", 0),
+                "currency":       currency,
+                "exchange":       info.get("exchange", "N/A"),
+                "last_updated":   datetime.now().isoformat()
             }
 
+            # Replace any remaining None values with "N/A"
             for key, value in overview.items():
                 if value is None:
                     overview[key] = "N/A"
